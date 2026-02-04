@@ -213,7 +213,7 @@ def build_deep_learning_model(input_dim):
     ])
 
     model.compile(
-        optimizer=tf.keras.optimizers.legacy.Adam(learning_rate=1e-3),
+        optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
         loss='mse',
         metrics=[tf.keras.metrics.RootMeanSquaredError(name='rmse')]
     )
