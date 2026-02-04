@@ -17,7 +17,7 @@ import seaborn as sns
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -38,14 +38,15 @@ st.set_page_config(
 @st.cache_data
 def generate_sample_dataset(n_samples=1000):
     """
-    Generate synthetic agricultural dataset for demonstration
-    This simulates real-world crop data with realistic patterns
+    Generate synthetic agricultural dataset with REALISTIC feature interactions
+    This creates balanced feature importance for better demonstration
     """
     np.random.seed(42)
-    
+
     crops = ['Wheat', 'Rice', 'Maize', 'Cotton', 'Sugarcane']
     seasons = ['Kharif', 'Rabi', 'Zaid']
-    
+
+    # Generate base features with realistic distributions
     data = {
         'Crop_Type': np.random.choice(crops, n_samples),
         'Temperature': np.random.normal(28, 5, n_samples).clip(15, 40),
@@ -59,27 +60,42 @@ def generate_sample_dataset(n_samples=1000):
         'Season': np.random.choice(seasons, n_samples),
         'Historical_Irrigation_Water': np.random.normal(200, 60, n_samples).clip(50, 500)
     }
-    
+
     df = pd.DataFrame(data)
-    
-    # Generate realistic crop yield based on features
-    # Yield depends on: temperature, rainfall, nutrients, soil conditions
+
+    # Generate REALISTIC crop yield with BALANCED feature contributions
+    # Base yield by crop type
     yield_base = {
-        'Wheat': 3.5, 'Rice': 4.2, 'Maize': 5.1, 
+        'Wheat': 3.5, 'Rice': 4.2, 'Maize': 5.1,
         'Cotton': 2.8, 'Sugarcane': 70
     }
-    
-    df['Crop_Yield'] = df.apply(lambda row: 
-        yield_base[row['Crop_Type']] * 
-        (1 + 0.01 * (row['Nitrogen'] - 50) / 20) *
-        (1 + 0.01 * (row['Phosphorus'] - 40) / 15) *
-        (1 + 0.015 * (row['Rainfall'] - 100) / 50) *
-        (1 - 0.02 * abs(row['Soil_pH'] - 6.5)) *
-        (1 + 0.01 * (row['Soil_Moisture'] - 45) / 15) *
-        np.random.normal(1, 0.15),  # Add realistic noise
+
+    # Create yield with multiple contributing factors (not dominated by one feature)
+    df['Crop_Yield'] = df.apply(lambda row:
+        yield_base[row['Crop_Type']] *
+        # Nitrogen contribution (15-20% impact)
+        (1 + 0.15 * (row['Nitrogen'] - 50) / 50) *
+        # Phosphorus contribution (10-15% impact)
+        (1 + 0.12 * (row['Phosphorus'] - 40) / 40) *
+        # Potassium contribution (10-15% impact)
+        (1 + 0.12 * (row['Potassium'] - 45) / 45) *
+        # Rainfall contribution (15-20% impact)
+        (1 + 0.15 * np.tanh((row['Rainfall'] - 100) / 100)) *
+        # Soil moisture contribution (10-15% impact)
+        (1 + 0.12 * (row['Soil_Moisture'] - 45) / 45) *
+        # Temperature contribution (10-15% impact) - optimal around 25-30°C
+        (1 - 0.10 * ((row['Temperature'] - 27.5) / 10) ** 2) *
+        # Soil pH contribution (8-12% impact) - optimal around 6.5
+        (1 - 0.10 * abs(row['Soil_pH'] - 6.5) / 2) *
+        # Humidity contribution (5-10% impact)
+        (1 + 0.08 * (row['Humidity'] - 65) / 65) *
+        # Season effect (5-8% impact)
+        (1.05 if row['Season'] == 'Kharif' else 0.98 if row['Season'] == 'Rabi' else 1.0) *
+        # Realistic random variation
+        np.random.normal(1, 0.08),
         axis=1
-    ).clip(lower=0)
-    
+    ).clip(lower=0.5)  # Ensure minimum realistic yield
+
     return df
 
 
@@ -92,21 +108,21 @@ def preprocess_data(df):
     Returns: processed dataframe, encoders, and scaler
     """
     df_processed = df.copy()
-    
+
     # Handle missing values
     df_processed.fillna(df_processed.median(numeric_only=True), inplace=True)
     df_processed.fillna(df_processed.mode().iloc[0], inplace=True)
-    
+
     # Encode categorical features
     encoders = {}
     categorical_cols = df_processed.select_dtypes(include=['object']).columns
-    
+
     for col in categorical_cols:
         if col != 'Crop_Yield':  # Don't encode target
             le = LabelEncoder()
             df_processed[col + '_Encoded'] = le.fit_transform(df_processed[col])
             encoders[col] = le
-    
+
     return df_processed, encoders
 
 
@@ -121,54 +137,63 @@ def train_yield_model(df):
         'Soil_pH', 'Nitrogen', 'Phosphorus', 'Potassium',
         'Crop_Type_Encoded', 'Season_Encoded'
     ]
-    
+
     X = df[feature_cols]
     y = df['Crop_Yield']
-    
+
     # Split data
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
     )
-    
+
     # Scale features
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
-    
-    # Train Random Forest model
+
+    # Train Random Forest model with optimized parameters
     model = RandomForestRegressor(
-        n_estimators=100,
-        max_depth=15,
+        n_estimators=150,
+        max_depth=12,
         min_samples_split=5,
         min_samples_leaf=2,
+        max_features='sqrt',  # Use sqrt for better feature distribution
         random_state=42,
         n_jobs=-1
     )
-    
+
     model.fit(X_train_scaled, y_train)
-    
+
     # Evaluate model
-    y_pred = model.predict(X_test_scaled)
-    mse = mean_squared_error(y_test, y_pred)
-    r2 = r2_score(y_test, y_pred)
-    
+    y_pred_train = model.predict(X_train_scaled)
+    y_pred_test = model.predict(X_test_scaled)
+
+    mse = mean_squared_error(y_test, y_pred_test)
+    r2 = r2_score(y_test, y_pred_test)
+    mae = mean_absolute_error(y_test, y_pred_test)
+
+    # Calculate training metrics to check for overfitting
+    r2_train = r2_score(y_train, y_pred_train)
+
     # Feature importance
     feature_importance = pd.DataFrame({
         'Feature': feature_cols,
         'Importance': model.feature_importances_
     }).sort_values('Importance', ascending=False)
-    
+
     metrics = {
         'MSE': mse,
         'RMSE': np.sqrt(mse),
-        'R2': r2
+        'R2': r2,
+        'MAE': mae,
+        'R2_train': r2_train
     }
-    
+
     return model, metrics, feature_importance, scaler
 
 
 def calculate_irrigation_recommendation(
-    crop_type, temperature, rainfall, humidity, 
+    crop_type, temperature, rainfall, humidity,
     soil_moisture, soil_ph, season
 ):
     """
@@ -178,10 +203,10 @@ def calculate_irrigation_recommendation(
     - Recent rainfall
     - Crop water requirements
     - Evapotranspiration factors
-    
+
     Returns: recommended water (mm), water saved (mm), sustainability message
     """
-    
+
     # Base water requirements by crop (mm/week)
     crop_water_needs = {
         'Wheat': 25,
@@ -190,9 +215,9 @@ def calculate_irrigation_recommendation(
         'Cotton': 35,
         'Sugarcane': 60
     }
-    
+
     base_water = crop_water_needs.get(crop_type, 30)
-    
+
     # Adjust for soil moisture
     # If soil moisture > 60%, reduce irrigation significantly
     if soil_moisture > 70:
@@ -205,7 +230,7 @@ def calculate_irrigation_recommendation(
         moisture_factor = 1.0
     else:
         moisture_factor = 1.3
-    
+
     # Adjust for recent rainfall
     # If rainfall > 30mm, reduce irrigation
     if rainfall > 50:
@@ -216,7 +241,7 @@ def calculate_irrigation_recommendation(
         rainfall_factor = 0.6
     else:
         rainfall_factor = 1.0
-    
+
     # Adjust for temperature (higher temp = more evaporation)
     if temperature > 35:
         temp_factor = 1.3
@@ -226,7 +251,7 @@ def calculate_irrigation_recommendation(
         temp_factor = 1.0
     else:
         temp_factor = 0.9
-    
+
     # Adjust for humidity (higher humidity = less evaporation)
     if humidity > 80:
         humidity_factor = 0.8
@@ -234,15 +259,15 @@ def calculate_irrigation_recommendation(
         humidity_factor = 1.0
     else:
         humidity_factor = 1.2
-    
+
     # Calculate recommended irrigation
     recommended_water = base_water * moisture_factor * rainfall_factor * temp_factor * humidity_factor
     recommended_water = max(0, recommended_water)  # Ensure non-negative
-    
+
     # Calculate water saved compared to traditional irrigation (assume 30mm fixed)
     traditional_irrigation = 30
     water_saved = max(0, traditional_irrigation - recommended_water)
-    
+
     # Generate sustainability message
     if recommended_water < 5:
         message = "🌧️ Excellent! No irrigation needed. Soil moisture and rainfall are sufficient."
@@ -256,7 +281,7 @@ def calculate_irrigation_recommendation(
     else:
         message = "🚰 Higher irrigation needed. Consider checking soil drainage."
         water_status = "High"
-    
+
     return recommended_water, water_saved, message, water_status
 
 
@@ -265,7 +290,7 @@ def calculate_irrigation_recommendation(
 # ============================================================================
 
 def main():
-    
+
     # Header Section
     st.title("🌾 Crop Yield Prediction & Water Optimization System")
     st.markdown("""
@@ -275,23 +300,23 @@ def main():
     - **Optimize irrigation water usage** to reduce wastage
     - **Support sustainable farming** practices for better resource management
     """)
-    
+
     st.markdown("---")
-    
+
     # ========================================================================
     # SIDEBAR - USER INPUTS
     # ========================================================================
-    
+
     st.sidebar.header("🌱 Input Parameters")
     st.sidebar.markdown("### Enter Crop and Environmental Details")
-    
+
     # Crop Selection
     crop_type = st.sidebar.selectbox(
         "🌾 Crop Type",
         options=['Wheat', 'Rice', 'Maize', 'Cotton', 'Sugarcane'],
         index=0
     )
-    
+
     # Season Selection
     season = st.sidebar.selectbox(
         "📅 Growing Season",
@@ -299,9 +324,9 @@ def main():
         index=0,
         help="Kharif: Monsoon crops | Rabi: Winter crops | Zaid: Summer crops"
     )
-    
+
     st.sidebar.markdown("### 🌡️ Environmental Conditions")
-    
+
     # Temperature
     temperature = st.sidebar.slider(
         "Temperature (°C)",
@@ -311,7 +336,7 @@ def main():
         step=0.5,
         help="Average temperature during growing period"
     )
-    
+
     # Rainfall
     rainfall = st.sidebar.slider(
         "Rainfall (mm)",
@@ -321,7 +346,7 @@ def main():
         step=5.0,
         help="Total rainfall in recent period"
     )
-    
+
     # Humidity
     humidity = st.sidebar.slider(
         "Humidity (%)",
@@ -331,9 +356,9 @@ def main():
         step=1.0,
         help="Relative humidity level"
     )
-    
+
     st.sidebar.markdown("### 🌱 Soil Conditions")
-    
+
     # Soil Moisture
     soil_moisture = st.sidebar.slider(
         "Soil Moisture (%)",
@@ -343,7 +368,7 @@ def main():
         step=1.0,
         help="Current soil moisture content"
     )
-    
+
     # Soil pH
     soil_ph = st.sidebar.slider(
         "Soil pH",
@@ -353,9 +378,9 @@ def main():
         step=0.1,
         help="Soil acidity/alkalinity level"
     )
-    
+
     st.sidebar.markdown("### 🧪 Soil Nutrients (kg/ha)")
-    
+
     # Nitrogen
     nitrogen = st.sidebar.slider(
         "Nitrogen (N)",
@@ -364,7 +389,7 @@ def main():
         value=50.0,
         step=1.0
     )
-    
+
     # Phosphorus
     phosphorus = st.sidebar.slider(
         "Phosphorus (P)",
@@ -373,7 +398,7 @@ def main():
         value=40.0,
         step=1.0
     )
-    
+
     # Potassium
     potassium = st.sidebar.slider(
         "Potassium (K)",
@@ -382,64 +407,77 @@ def main():
         value=45.0,
         step=1.0
     )
-    
+
     # Prediction Button
     predict_button = st.sidebar.button("🚀 Predict Yield & Optimize Water", type="primary")
-    
+
     # ========================================================================
     # LOAD AND TRAIN MODEL
     # ========================================================================
-    
+
     with st.spinner("🔄 Loading and training model..."):
         # Generate or load dataset
-        df = generate_sample_dataset(n_samples=1000)
-        
+        df = generate_sample_dataset(n_samples=1200)
+
         # Preprocess data
         df_processed, encoders = preprocess_data(df)
-        
+
         # Train model
         model, metrics, feature_importance, scaler = train_yield_model(df_processed)
-    
+
     # ========================================================================
     # MAIN CONTENT AREA
     # ========================================================================
-    
+
     # Model Performance Section
     st.header("📊 Model Performance")
-    
-    col1, col2, col3 = st.columns(3)
-    
+
+    col1, col2, col3, col4 = st.columns(4)
+
     with col1:
         st.metric(
-            label="R² Score",
+            label="R² Score (Test)",
             value=f"{metrics['R2']:.4f}",
             help="Proportion of variance explained by the model"
         )
-    
+
     with col2:
         st.metric(
             label="RMSE",
             value=f"{metrics['RMSE']:.4f}",
             help="Root Mean Squared Error"
         )
-    
+
     with col3:
         st.metric(
-            label="MSE",
-            value=f"{metrics['MSE']:.4f}",
-            help="Mean Squared Error"
+            label="MAE",
+            value=f"{metrics['MAE']:.4f}",
+            help="Mean Absolute Error"
         )
-    
+
+    with col4:
+        st.metric(
+            label="R² Score (Train)",
+            value=f"{metrics['R2_train']:.4f}",
+            help="Training score - check for overfitting"
+        )
+
+    # Overfitting check
+    if metrics['R2_train'] - metrics['R2'] > 0.1:
+        st.warning("⚠️ Model shows some overfitting (train R² >> test R²). Consider regularization.")
+    else:
+        st.success("✅ Model shows good generalization (minimal overfitting)")
+
     st.markdown("---")
-    
+
     # ========================================================================
     # PREDICTION RESULTS
     # ========================================================================
-    
+
     if predict_button:
-        
+
         st.header("🎯 Prediction Results")
-        
+
         # Prepare input data for prediction
         input_data = {
             'Crop_Type': crop_type,
@@ -453,65 +491,65 @@ def main():
             'Potassium': potassium,
             'Season': season
         }
-        
+
         # Encode categorical variables
         input_df = pd.DataFrame([input_data])
         input_df['Crop_Type_Encoded'] = encoders['Crop_Type'].transform([crop_type])[0]
         input_df['Season_Encoded'] = encoders['Season'].transform([season])[0]
-        
+
         # Prepare features for model
         feature_cols = [
             'Temperature', 'Rainfall', 'Humidity', 'Soil_Moisture',
             'Soil_pH', 'Nitrogen', 'Phosphorus', 'Potassium',
             'Crop_Type_Encoded', 'Season_Encoded'
         ]
-        
+
         X_input = input_df[feature_cols]
         X_input_scaled = scaler.transform(X_input)
-        
+
         # Make prediction
         predicted_yield = model.predict(X_input_scaled)[0]
-        
+
         # Calculate irrigation recommendation
         recommended_water, water_saved, message, water_status = calculate_irrigation_recommendation(
             crop_type, temperature, rainfall, humidity, soil_moisture, soil_ph, season
         )
-        
+
         # Display Results
         col1, col2 = st.columns(2)
-        
+
         with col1:
             st.subheader("🌾 Crop Yield Prediction")
-            
+
             # Determine yield unit based on crop
             if crop_type == 'Sugarcane':
                 yield_unit = "tons/hectare"
             else:
                 yield_unit = "tons/hectare"
-            
+
             st.success(f"### Predicted Yield: {predicted_yield:.2f} {yield_unit}")
-            
+
             # Yield interpretation
             crop_avg_yields = {
                 'Wheat': 3.5, 'Rice': 4.2, 'Maize': 5.1,
                 'Cotton': 2.8, 'Sugarcane': 70
             }
-            
+
             avg_yield = crop_avg_yields.get(crop_type, 3.5)
-            
+
             if predicted_yield > avg_yield * 1.1:
                 st.info("✅ **Excellent!** Yield is above average for this crop.")
             elif predicted_yield > avg_yield * 0.9:
                 st.info("✔️ **Good!** Yield is around average for this crop.")
             else:
                 st.warning("⚠️ **Below Average.** Consider improving soil conditions or nutrients.")
-        
+
         with col2:
             st.subheader("💧 Water Optimization")
-            
+
             st.success(f"### Recommended Irrigation: {recommended_water:.2f} mm")
             st.info(f"💰 **Water Saved:** {water_saved:.2f} mm compared to traditional methods")
-            
+
             # Water status indicator
             if water_status == "Optimal":
                 st.success(message)
@@ -521,13 +559,13 @@ def main():
                 st.warning(message)
             else:
                 st.error(message)
-        
+
         # Sustainability Impact
         st.markdown("---")
         st.subheader("🌍 Sustainability Impact")
-        
+
         col1, col2, col3 = st.columns(3)
-        
+
         with col1:
             water_saved_liters = water_saved * 10  # 1mm = 10 liters per sq meter
             st.metric(
@@ -535,7 +573,7 @@ def main():
                 f"{water_saved_liters:.0f} L",
                 help="Compared to traditional irrigation"
             )
-        
+
         with col2:
             # Assume 1 hectare farm
             annual_savings = water_saved_liters * 20  # 20 irrigation cycles per season
@@ -544,7 +582,7 @@ def main():
                 f"{annual_savings:.0f} L",
                 help="Based on 20 irrigation cycles"
             )
-        
+
         with col3:
             efficiency_improvement = (water_saved / 30) * 100 if water_saved > 0 else 0
             st.metric(
@@ -552,7 +590,7 @@ def main():
                 f"{efficiency_improvement:.1f}%",
                 help="Water use efficiency gain"
             )
-        
+
         st.success("""
         🌱 **Environmental Benefits:**
         - Reduced groundwater depletion
@@ -560,77 +598,78 @@ def main():
         - Minimized fertilizer runoff
         - Sustainable agricultural practices
         """)
-    
+
     # ========================================================================
     # VISUALIZATIONS
     # ========================================================================
-    
+
     st.markdown("---")
     st.header("📈 Model Insights & Visualizations")
-    
+
     tab1, tab2 = st.tabs(["Feature Importance", "Data Insights"])
-    
+
     with tab1:
         st.subheader("🔍 Feature Importance Analysis")
         st.markdown("Understanding which factors most influence crop yield:")
-        
+
         # Feature Importance Plot
         fig, ax = plt.subplots(figsize=(10, 6))
-        
+
         feature_names = [
             'Temperature', 'Rainfall', 'Humidity', 'Soil Moisture',
             'Soil pH', 'Nitrogen', 'Phosphorus', 'Potassium',
             'Crop Type', 'Season'
         ]
-        
+
         feature_importance_display = feature_importance.copy()
         feature_importance_display['Feature'] = feature_names
-        
+
         colors = plt.cm.Greens(np.linspace(0.4, 0.9, len(feature_importance_display)))
-        
+
         bars = ax.barh(
             feature_importance_display['Feature'],
             feature_importance_display['Importance'],
             color=colors
         )
-        
+
         ax.set_xlabel('Importance Score', fontsize=12, fontweight='bold')
         ax.set_ylabel('Features', fontsize=12, fontweight='bold')
-        ax.set_title('Feature Importance in Crop Yield Prediction', 
+        ax.set_title('Feature Importance in Crop Yield Prediction',
                      fontsize=14, fontweight='bold', pad=20)
         ax.grid(axis='x', alpha=0.3, linestyle='--')
-        
+
         # Add value labels
         for bar in bars:
             width = bar.get_width()
             ax.text(width, bar.get_y() + bar.get_height()/2,
                    f'{width:.3f}',
                    ha='left', va='center', fontsize=9, fontweight='bold')
-        
+
         plt.tight_layout()
         st.pyplot(fig)
-        
+
         st.info("""
         **Interpretation:**
         - Higher importance = greater impact on crop yield
         - Focus on top features for yield improvement
-        - Soil nutrients (N, P, K) and moisture are typically critical
+        - Soil nutrients (N, P, K) and environmental factors work together
+        - Balanced importance indicates realistic feature interactions
         """)
-    
+
     with tab2:
         st.subheader("📊 Dataset Correlation Heatmap")
-        
+
         # Select numeric columns for correlation
         numeric_cols = [
             'Temperature', 'Rainfall', 'Humidity', 'Soil_Moisture',
             'Soil_pH', 'Nitrogen', 'Phosphorus', 'Potassium', 'Crop_Yield'
         ]
-        
+
         correlation_matrix = df[numeric_cols].corr()
-        
+
         # Create heatmap
         fig, ax = plt.subplots(figsize=(10, 8))
-        
+
         sns.heatmap(
             correlation_matrix,
             annot=True,
@@ -642,24 +681,24 @@ def main():
             cbar_kws={"shrink": 0.8},
             ax=ax
         )
-        
+
         ax.set_title('Feature Correlation Matrix', fontsize=14, fontweight='bold', pad=20)
         plt.tight_layout()
         st.pyplot(fig)
-        
+
         st.info("""
         **How to read:**
         - Green: Positive correlation (both increase together)
         - Red: Negative correlation (one increases, other decreases)
         - Values close to 1 or -1 indicate strong relationships
         """)
-    
+
     # ========================================================================
     # ADDITIONAL INFORMATION
     # ========================================================================
-    
+
     st.markdown("---")
-    
+
     with st.expander("ℹ️ About This System"):
         st.markdown("""
         ### System Overview
@@ -677,9 +716,9 @@ def main():
         - **Visualization:** Matplotlib, Seaborn
         
         **Model Details:**
-        - **Algorithm:** Random Forest (100 trees)
+        - **Algorithm:** Random Forest (150 trees)
         - **Features:** 10 environmental and soil parameters
-        - **Performance:** Evaluated using R², MSE, RMSE
+        - **Performance:** Evaluated using R², MSE, RMSE, MAE
         
         **Water Optimization Logic:**
         The system considers:
@@ -698,7 +737,7 @@ def main():
         **Developed for:**
         Academic research, sustainable agriculture initiatives, and precision farming applications.
         """)
-    
+
     with st.expander("📖 How to Use This Application"):
         st.markdown("""
         ### Step-by-Step Guide
@@ -728,7 +767,7 @@ def main():
         - **Water Saved:** Efficiency gain vs traditional methods
         - **Sustainability Impact:** Environmental benefits achieved
         """)
-    
+
     # Footer
     st.markdown("---")
     st.markdown("""
