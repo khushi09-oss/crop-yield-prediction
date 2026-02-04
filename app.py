@@ -265,14 +265,20 @@ def train_deep_learning_model(df):
         callbacks=[early_stop]
     )
 
-    y_pred = model.predict(X_test_scaled, verbose=0).flatten()
-    mse = mean_squared_error(y_test, y_pred)
-    r2 = r2_score(y_test, y_pred)
+    y_pred_test = model.predict(X_test_scaled, verbose=0).flatten()
+    y_pred_train = model.predict(X_train_scaled, verbose=0).flatten()
+    
+    mse = mean_squared_error(y_test, y_pred_test)
+    r2 = r2_score(y_test, y_pred_test)
+    mae = mean_absolute_error(y_test, y_pred_test)
+    r2_train = r2_score(y_train, y_pred_train)
 
     metrics = {
         'MSE': mse,
         'RMSE': np.sqrt(mse),
-        'R2': r2
+        'R2': r2,
+        'MAE': mae,
+        'R2_train': r2_train
     }
 
     return model, metrics, scaler
@@ -528,7 +534,7 @@ def main():
     st.header("📊 Model Performance")
     st.caption(f"Current model: {model_choice}")
     
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         st.metric(
