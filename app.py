@@ -376,7 +376,7 @@ def calculate_irrigation_recommendation(
     recommended_water = max(0, recommended_water)  # Ensure non-negative
 
     # Calculate water saved compared to traditional irrigation (assume 30mm fixed)
-    traditional_irrigation = 30
+    traditional_irrigation = base_water
     water_saved = max(0, traditional_irrigation - recommended_water)
 
     # Generate sustainability message
@@ -533,7 +533,7 @@ def main():
 
     with st.spinner("🔄 Loading and training model..."):
         # Generate or load dataset
-        df = generate_sample_dataset(n_samples=1200)
+        df = generate_sample_dataset(n_samples=1500)
 
         # Preprocess data
         df_processed, encoders = preprocess_data(df)
@@ -735,9 +735,12 @@ def main():
 
         col1, col2, col3 = st.columns(3)
 
+        # Use historical irrigation as baseline instead of fixed 30
+        baseline_water = user_inputs['Historical_Irrigation_Water']
+        water_saved = max(baseline_water - recommended_water, 0)  # Only positive savings
         water_saved_liters = water_saved * 10  # 1mm = 10 liters per sq meter
         annual_savings = water_saved_liters * 20  # 20 irrigation cycles per season
-        efficiency_improvement = (water_saved / 30) * 100 if water_saved > 0 else 0
+        efficiency_improvement = (water_saved / baseline_water) * 100 if baseline_water > 0 else 0
 
         with col1:
             st.markdown(f"""
