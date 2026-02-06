@@ -842,19 +842,7 @@ def main():
             plt.tight_layout()
             st.pyplot(fig)
 
-            st.info("""
-            **Interpretation:**
-            - Higher importance = greater impact on crop yield
-            - Focus on top features for yield improvement
-            - Balanced distribution indicates realistic feature interactions
-            - Nutrients (N, P, K), rainfall, and soil conditions work together
-            - No single feature should dominate (that would be unrealistic)
-            
-            **Expected Balanced Importance:**
-            - Major nutrients & water: 12-18% each
-            - Environmental factors: 8-12% each  
-            - Crop/season context: 5-10% each
-            """)
+
     
     with tab2:
         st.subheader("📊 Dataset Correlation Heatmap")
@@ -910,15 +898,37 @@ def main():
         - Sustainable farming practices
         
         **Technology Stack:**
-        - **Machine Learning:** Random Forest Regressor
-        - **Framework:** Streamlit for web interface
-        - **Data Processing:** Pandas, NumPy, Scikit-learn
-        - **Visualization:** Matplotlib, Seaborn
+        - **Machine Learning:** 
+          - Random Forest Regressor (Primary Model)
+          - Deep Neural Network (TensorFlow/Keras Alternative)
+        - **Web Framework:** Streamlit (Python-based interactive UI)
+        - **Data Processing:** 
+          - Pandas (Data manipulation & analysis)
+          - NumPy (Numerical computations)
+          - Scikit-learn (ML preprocessing & models)
+        - **Deep Learning:** 
+          - TensorFlow 2.x (Neural network framework)
+          - Keras API (High-level neural network API)
+        - **Visualization:** 
+          - Matplotlib (Static plots)
+          - Seaborn (Statistical visualizations)
+        - **Development:** Python 3.8+
         
         **Model Details:**
-        - **Algorithm:** Random Forest (150 trees)
-        - **Features:** 10 environmental and soil parameters
-        - **Performance:** Evaluated using R², MSE, RMSE, MAE
+        - **Primary Algorithm:** Random Forest Regressor
+          - Trees: 200 (ensemble of decision trees)
+          - Max Depth: 15 (complexity control)
+          - Max Features: sqrt(10) for feature distribution
+          - Bootstrap: True (sampling with replacement)
+          - OOB Score: Enabled (built-in validation)
+          - **Alternative Algorithm:** Deep Neural Network
+          - Architecture: 128 → 64 → 32 → 1 neurons
+          - Activation: ReLU (hidden), Linear (output)
+          - Regularization: L2 + Dropout (30%)
+          - Optimizer: Adam with learning rate scheduling
+        - **Input Features:** 10 environmental and soil parameters
+        - **Performance Metrics:** R², MSE, RMSE, MAE, OOB Score
+        - **Training Strategy:** 80/20 train-test split with feature scaling
         
         **Water Optimization Logic:**
         The system considers:
@@ -929,13 +939,34 @@ def main():
         5. Seasonal variations
         
         **Use Cases:**
-        - Farm planning and resource allocation
-        - Irrigation scheduling
-        - Crop selection based on conditions
-        - Environmental impact assessment
+        - **Farm Management:**
+          - Yield forecasting for harvest planning
+          - Resource allocation optimization
+          - Crop rotation decision support
+        - **Water Conservation:**
+          - Precision irrigation scheduling
+          - Drought risk mitigation
+          - Groundwater preservation
+        - **Agricultural Planning:**
+          - Seasonal crop selection
+          - Fertilizer requirement estimation
+          - Climate adaptation strategies
+        - **Sustainability:**
+          - Environmental impact assessment
+          - Carbon footprint reduction
+          - Sustainable farming certification support
+        - **Economic Benefits:**
+          - Cost reduction through optimized inputs
+          - Risk management for farmers
+          - Insurance and loan assessment
         
-        **Developed for:**
-        Academic research, sustainable agriculture initiatives, and precision farming applications.
+        **Key Features:**
+        - ✅ User-friendly interface (no coding required)
+        - ✅ Real-time predictions
+        - ✅ Actionable recommendations
+        - ✅ Sustainability metrics
+        - ✅ Visual insights and analytics
+        - ✅ Dual model architecture (RF + Deep Learning)
         """)
 
     with st.expander("📖 How to Use This Application"):
