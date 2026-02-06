@@ -375,8 +375,9 @@ def calculate_irrigation_recommendation(
     recommended_water = base_water * moisture_factor * rainfall_factor * temp_factor * humidity_factor
     recommended_water = max(0, recommended_water)  # Ensure non-negative
 
-    # Calculate water saved compared to traditional irrigation (assume 30mm fixed)
-    traditional_irrigation = base_water
+    # Calculate water saved compared to traditional irrigation
+    # Traditional irrigation typically uses 30% more water than optimal (no precision adjustment)
+    traditional_irrigation = base_water * 1.3  # Traditional methods overwater by ~30%
     water_saved = max(0, traditional_irrigation - recommended_water)
 
     # Generate sustainability message
@@ -393,7 +394,7 @@ def calculate_irrigation_recommendation(
         message = "🚰 Higher irrigation needed. Consider checking soil drainage."
         water_status = "High"
 
-    return recommended_water, water_saved, message, water_status
+    return recommended_water, water_saved, message, water_status, base_water
 
 
 # ============================================================================
@@ -453,6 +454,8 @@ def main():
         "Rainfall (mm)",
         min_value=0.0,
         max_value=500.0,
+        value=100.0,
+        step=5.0,
         help="Total rainfall in recent period"
     )
 
@@ -633,7 +636,7 @@ def main():
         predicted_yield = float(np.asarray(predicted_yield).squeeze())
 
         # Calculate irrigation recommendation
-        recommended_water, water_saved, message, water_status = calculate_irrigation_recommendation(
+        recommended_water, water_saved, message, water_status, base_water = calculate_irrigation_recommendation(
             crop_type, temperature, rainfall, humidity, soil_moisture, soil_ph, season
         )
 
@@ -735,15 +738,9 @@ def main():
 
         col1, col2, col3 = st.columns(3)
 
-        # Use crop base water requirement as baseline for traditional irrigation
-        crop_water_needs = {
-            'Wheat': 25, 'Rice': 50, 'Maize': 30, 'Cotton': 35, 'Sugarcane': 60
-        }
-        baseline_water = crop_water_needs.get(crop_type, 30)
-        water_saved_calc = max(baseline_water - recommended_water, 0)  # Only positive savings
-        water_saved_liters = water_saved_calc * 10  # 1mm = 10 liters per sq meter
+        water_saved_liters = water_saved * 10  # 1mm = 10 liters per sq meter
         annual_savings = water_saved_liters * 20  # 20 irrigation cycles per season
-        efficiency_improvement = (water_saved_calc / baseline_water) * 100 if baseline_water > 0 else 0
+        efficiency_improvement = (water_saved / base_water) * 100 if base_water > 0 else 0
 
         with col1:
             st.markdown(f"""
