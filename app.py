@@ -735,12 +735,15 @@ def main():
 
         col1, col2, col3 = st.columns(3)
 
-        # Use historical irrigation as baseline instead of fixed 30
-        baseline_water = user_inputs['Historical_Irrigation_Water']
-        water_saved = max(baseline_water - recommended_water, 0)  # Only positive savings
-        water_saved_liters = water_saved * 10  # 1mm = 10 liters per sq meter
+        # Use crop base water requirement as baseline for traditional irrigation
+        crop_water_needs = {
+            'Wheat': 25, 'Rice': 50, 'Maize': 30, 'Cotton': 35, 'Sugarcane': 60
+        }
+        baseline_water = crop_water_needs.get(crop_type, 30)
+        water_saved_calc = max(baseline_water - recommended_water, 0)  # Only positive savings
+        water_saved_liters = water_saved_calc * 10  # 1mm = 10 liters per sq meter
         annual_savings = water_saved_liters * 20  # 20 irrigation cycles per season
-        efficiency_improvement = (water_saved / baseline_water) * 100 if baseline_water > 0 else 0
+        efficiency_improvement = (water_saved_calc / baseline_water) * 100 if baseline_water > 0 else 0
 
         with col1:
             st.markdown(f"""
